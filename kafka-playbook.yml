@@ -1,4 +1,4 @@
- TODO: Kafka and zookeeper services and autamatic start scripts
+# TODO: Kafka and zookeeper services and autamatic start scripts
 #
 ---
 - hosts: all
