@@ -1,0 +1,144 @@
+# TODO: Kafka and zookeeper services and autamatic start scripts
+#
+---
+- hosts: all
+  any_errors_fatal: true
+  vars:
+        kafka_user: kafka
+        kafka_group: kafka
+        jdk_version: 8
+        # new_disk: '/dev/sdb'                               # set to new disk being added to volume group
+        new_mntp: '/kafkainst'                               # set to the desired mount point to be created and new logical volume to be mounted to
+        confluent_version: '2.0.1'                         
+        confluent_enterprise: true
+        # Platforms version
+        cp_version: '4.1'
+        # Scala installation version
+        scala_version: '2.11'
+   
+
+  tasks:         
+    - name: Create kafka group
+      group:
+        name: "{{ kafka_group}}"
+        state: present
+      become: true
+
+    - name: Create kafka user
+      user: name={{ kafka_user}} comment="Kafka application user" group={{kafka_group}}
+      become: true
+
+    - name: Change owner of {{new_mntp}} to {{kafka_user}}:{{kafka_group}} recursively
+      file: path={{new_mntp}} recurse=true owner={{kafka_user}} group={{kafka_group}}
+      become: true
+
+    - name: Install JDK {{jdk_version}}
+      apt:
+          name: default-jre
+          state: present
+      become: true
+
+    - name: Installing additional packages
+      apt:
+          name: "{{ item }}"
+          state: present
+      with_items:
+        - build-essential
+        - libssl-dev
+        - libffi-dev
+        - python-dev
+        - python-crypto
+      become: true
+
+    - name: Install python-selinux
+      apt:
+          name: python-selinux
+          state: present
+      become: true
+
+    - name: Adding an APT signing key, will not download if present
+      apt_key:
+        validate_certs: no
+        url: "http://packages.confluent.io/deb/{{ cp_version }}/archive.key"
+        state: present
+      become: true
+
+    - name: Adding repository to apt sources
+      apt_repository:
+          repo: "deb [arch=amd64] https://packages.confluent.io/deb/{{ cp_version }} stable main"
+          state: present
+      become: true
+   
+    - name: Installing Confluent Open Source
+      apt:
+          name:  confluent-platform-oss-{{ scala_version }}
+          state: present
+      when: (not confluent_enterprise)
+      become: true
+
+    - name: Installing  Confluent Enterprise
+      apt:
+          name:  confluent-platform-{{ scala_version }}
+          state: present
+      when: (confluent_enterprise)
+      become: true
+
+    - name: Change owner of /var/log/kafka to {{kafka_user}}:{{kafka_group}}
+      file: path="/var/log/kafka" recurse=true owner={{kafka_user}} group={{kafka_group}}
+      become: true
+
+    - name: Configure /etc/kafka/zookeeper.properties
+      template:
+          src=zookeeper.j2
+          dest=/etc/kafka/zookeeper.properties
+      become: true
+
+    - name: Create zookeeper directory.
+      file: dest={{new_mntp}}/zookeeper owner={{kafka_user}} group={{kafka_group}} state=directory
+      become: true
+
+    - name: Create zookeeper directory.
+      file: dest={{new_mntp}}/kafka owner={{kafka_user}} group={{kafka_group}} state=directory
+      become: true
+
+    - name: Create myid files
+      lineinfile: dest={{new_mntp}}/zookeeper/myid owner={{kafka_user}} group={{kafka_group}} line={{ broker_id + 1 }} create=yes
+      become: true
+
+    - name: Configure kafka log.dirs
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: log.dirs
+          value: "{{new_mntp}}/kafka"
+          backup: yes
+      become: true
+
+    - name: Configure kafka log.dirs
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: delete.topic.enable
+          value: true
+          backup: yes
+      become: true
+
+    - debug: msg="Broker ID is set to be {{ broker_id }}"
+
+    - name: Configure kafka broker.id
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: broker.id
+          value: "{{ broker_id }}"
+          backup: yes
+      become: true
+
+    - name: Configure kafka zookeeper.connect
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: zookeeper.connect
+          value: "{% for node in play_hosts %}{{ hostvars[node]['ansible_host']  }}:2181{% if not loop.last %},{% endif %}{% endfor %}"
+          backup: yes
+      become: true    
