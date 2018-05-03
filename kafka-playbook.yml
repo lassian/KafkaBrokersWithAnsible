@@ -1,4 +1,4 @@
-# TODO: Kafka and zookeeper services and autamatic start scripts
+ TODO: Kafka and zookeeper services and autamatic start scripts
 #
 ---
 - hosts: all
@@ -16,7 +16,6 @@
         # Scala installation version
         scala_version: '2.11'
    
-
   tasks:         
     - name: Create kafka group
       group:
@@ -89,7 +88,7 @@
 
     - name: Configure /etc/kafka/zookeeper.properties
       template:
-          src=zookeeper.j2
+          src=zk/zookeeper.j2
           dest=/etc/kafka/zookeeper.properties
       become: true
 
